@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Word Flip Cards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700&display=swap">
+<style>
+/* VOICE: friendly, calm, one thing at a time for a kid
+   IDEA: a stack of paper flashcards on a desk
+   PICTURE: one big card in the middle, flipping
+   COLOUR and TYPE: river blue ground, white card, warm orange accent; Rubik (Hebrew + English)
+   LAYOUT: mode choice on top, card centred, simple controls below */
+:root{color-scheme:light dark;
+  --bg:light-dark(#2f7fc1,#0f2236);
+  --card:light-dark(#ffffff,#f4f1ea);
+  --back:light-dark(#fff4e3,#ffe9c7);
+  --ink:#10223a;
+  --text:light-dark(#ffffff,#e9f1f8);
+  --accent:#ff8a1f;
+  --soft:light-dark(rgba(255,255,255,.18),rgba(255,255,255,.08))}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:17px/1.5 Rubik,system-ui,sans-serif;overflow-x:clip;display:flex;flex-direction:column;align-items:center;padding:24px 16px 40px}
+h1{font-size:clamp(26px,5vw,36px);line-height:1.05;margin:4px 0 18px;font-weight:700;text-align:center}
+.modes{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:22px}
+.modes button{font:600 16px Rubik,sans-serif;min-height:44px;padding:8px 18px;border-radius:999px;border:2px solid rgba(255,255,255,.55);background:transparent;color:var(--text);cursor:pointer}
+.modes button[aria-pressed=true]{background:#fff;color:var(--ink);border-color:#fff}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.stage{perspective:1200px;width:min(440px,100%);aspect-ratio:4/3}
+.card{position:relative;width:100%;height:100%;transition:transform .5s ease;transform-style:preserve-3d;cursor:pointer;border:0;padding:0;background:none;display:block}
+.card.flipped{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;border-radius:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;backface-visibility:hidden;-webkit-backface-visibility:hidden;color:var(--ink);box-shadow:0 14px 0 rgba(0,0,0,.14),0 22px 40px rgba(0,0,0,.18);padding:20px}
+.front{background:var(--card)}
+.backf{background:var(--back);transform:rotateY(180deg)}
+.word{font-size:clamp(36px,10vw,58px);font-weight:700;line-height:1.1;text-align:center}
+.word[dir=rtl]{font-weight:600}
+.hint{font-size:14px;color:#5b6b80}
+.say{width:56px;height:56px;border-radius:50%;border:0;background:var(--accent);color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 0 #c8640c}
+.say:active{transform:translateY(2px);box-shadow:0 2px 0 #c8640c}
+.say svg{width:28px;height:28px}
+.bar{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:30px;flex-wrap:wrap}
+.bar button{font:600 16px Rubik,sans-serif;min-height:48px;min-width:48px;padding:8px 18px;border-radius:14px;border:0;background:var(--soft);color:var(--text);cursor:pointer}
+.bar button:disabled{opacity:.4;cursor:default}
+.bar .main{background:#fff;color:var(--ink)}
+.count{font-weight:600;min-width:64px;text-align:center;font-variant-numeric:tabular-nums}
+.note{margin-top:22px;font-size:14px;opacity:.85;text-align:center;max-width:440px}
+.count{min-width:90px}
+.prog{width:min(440px,100%);height:8px;border-radius:99px;background:var(--soft);margin-top:18px;overflow:hidden}
+#fill{height:100%;width:0;background:var(--accent);border-radius:99px;transition:width .3s}
+.done{position:fixed;inset:0;display:grid;place-items:center;background:rgba(10,25,45,.55);z-index:5;padding:16px}
+.done[hidden]{display:none}
+.donebox{background:var(--card);color:var(--ink);border-radius:22px;padding:32px 28px;text-align:center;width:min(360px,100%);box-shadow:0 14px 0 rgba(0,0,0,.14)}
+.donebox .big{font-size:40px;font-weight:700;line-height:1.1}
+.donebox p{margin:10px 0 20px}
+.donebox button{font:600 17px Rubik,sans-serif;min-height:48px;padding:8px 24px;border-radius:14px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+#confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+@media(prefers-reduced-motion:reduce){.card{transition:none}}
+</style>
+</head>
+<body>
+<h1>Flip the card</h1>
+
+<div class="modes" role="group" aria-label="Card side">
+  <button data-mode="he" aria-pressed="true">עברית → English</button>
+  <button data-mode="en" aria-pressed="false">English → עברית</button>
+  <button data-mode="mix" aria-pressed="false">Mix</button>
+</div>
+
+<div class="stage">
+  <div class="card" id="card" role="button" tabindex="0" aria-label="Flip card">
+    <div class="face front" id="front"></div>
+    <div class="face backf" id="back"></div>
+  </div>
+</div>
+
+<div class="bar">
+  <button id="prev" aria-label="Previous card">←</button>
+  <span class="count" id="count">1 / 15</span>
+  <button id="next" class="main" aria-label="Next card">Next →</button>
+  <button id="shuffle">Start over</button>
+</div>
+<div class="prog" aria-hidden="true"><div id="fill"></div></div>
+
+<p class="note">Tap the card to flip it. Tap or hover the orange button to hear the English word. Every word comes up 3 times, in random order.</p>
+
+<div class="done" id="done" hidden>
+  <div class="donebox">
+    <div class="big">Well done!</div>
+    <p>You saw every word 3 times.</p>
+    <button id="again">Play again</button>
+  </div>
+</div>
+<canvas id="confetti" aria-hidden="true"></canvas>
+
+<script>
+{
+const WORDS=[
+ ["almost","כמעט"],["boat","סירה"],["bridge","גשר"],["cross","לחצות"],["dangerous","מסוכן"],
+ ["mountain","הר"],["near","קרוב"],["possible","אפשרי"],["river","נהר"],["rope","חבל"],
+ ["suddenly","פתאום"],["thousand","אלף"],["unusual","לא רגיל"],["village","כפר"],["wide","רחב"]
+];
+const SPEAK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+
+const ROUNDS=3;
+let mode='he', order=[], sides=[], pos=0, lastSpoken=0;
+const card=document.getElementById('card'), front=document.getElementById('front'), back=document.getElementById('back'), count=document.getElementById('count');
+
+function shuffleArr(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function pickSides(){sides=order.map(()=>mode==='mix'?(Math.random()<.5?'he':'en'):mode)}
+function buildDeck(){
+  order=[];
+  for(let r=0;r<ROUNDS;r++){
+    const round=shuffleArr(WORDS.map((_,i)=>i));
+    if(order.length && round[0]===order[order.length-1]) [round[0],round[1]]=[round[1],round[0]];
+    order.push(...round);
+  }
+  pos=0; pickSides();
+}
+function goNext(){
+  if(pos>=order.length-1){finish();return}
+  pos++; render();
+}
+function goPrev(){if(pos>0){pos--;render()}}
+function restart(){document.getElementById('done').hidden=true;buildDeck();render()}
+
+function finish(){
+  document.getElementById('fill').style.width='100%';
+  document.getElementById('done').hidden=false;
+  document.getElementById('again').focus();
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches) confetti();
+}
+function confetti(){
+  const c=document.getElementById('confetti'), x=c.getContext('2d');
+  const W=c.width=innerWidth, H=c.height=innerHeight;
+  const cols=['#ff8a1f','#ffd23f','#3ec46d','#4fb3e8','#ff5d8f','#ffffff'];
+  const ps=Array.from({length:160},()=>({x:Math.random()*W,y:-20-Math.random()*H*.6,vx:(Math.random()-.5)*3,vy:2+Math.random()*3,r:Math.random()*6.3,vr:(Math.random()-.5)*.3,w:6+Math.random()*6,h:8+Math.random()*8,c:cols[Math.floor(Math.random()*cols.length)]}));
+  const t0=performance.now();
+  function step(t){
+    x.clearRect(0,0,W,H);
+    for(const p of ps){p.x+=p.vx;p.y+=p.vy;p.vy+=.03;p.r+=p.vr;x.save();x.translate(p.x,p.y);x.rotate(p.r);x.fillStyle=p.c;x.fillRect(-p.w/2,-p.h/2,p.w,p.h);x.restore()}
+    if(t-t0<4500) requestAnimationFrame(step); else x.clearRect(0,0,W,H);
+  }
+  requestAnimationFrame(step);
+}
+
+function speak(text){
+  try{
+    const now=Date.now(); if(now-lastSpoken<600) return; lastSpoken=now;
+    const s=window.speechSynthesis; if(!s) return;
+    s.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang='en-US'; u.rate=.85;
+    const v=s.getVoices().find(v=>/^en(-|_)US/i.test(v.lang))||s.getVoices().find(v=>/^en/i.test(v.lang));
+    if(v) u.voice=v;
+    s.speak(u);
+  }catch(e){}
+}
+
+function faceHTML(lang,w){
+  if(lang==='he') return '<div class="word" dir="rtl" lang="he">'+w[1]+'</div>';
+  return '<div class="word" lang="en">'+w[0]+'</div><button class="say" type="button" data-say="'+w[0]+'" aria-label="Hear '+w[0]+'">'+SPEAK+'</button>';
+}
+
+function render(){
+  const w=WORDS[order[pos]], first=sides[pos], second=first==='he'?'en':'he';
+  card.classList.remove('flipped');
+  front.innerHTML=faceHTML(first,w)+'<div class="hint">tap to flip</div>';
+  back.innerHTML=faceHTML(second,w);
+  count.textContent=(pos+1)+' / '+order.length;
+  document.getElementById('fill').style.width=(pos/order.length*100)+'%';
+  document.getElementById('prev').disabled=pos===0;
+}
+
+function flip(){card.classList.toggle('flipped')}
+
+card.addEventListener('click',e=>{
+  const b=e.target.closest('.say');
+  if(b){e.stopPropagation();lastSpoken=0;speak(b.dataset.say);return}
+  flip();
+});
+card.addEventListener('mouseover',e=>{
+  const b=e.target.closest('.say');
+  if(b && !b.contains(e.relatedTarget)) speak(b.dataset.say);
+});
+card.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();flip()}});
+
+document.getElementById('next').addEventListener('click',goNext);
+document.getElementById('prev').addEventListener('click',goPrev);
+document.getElementById('shuffle').addEventListener('click',restart);
+document.getElementById('again').addEventListener('click',restart);
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('done').hidden) return;
+  if(e.key==='ArrowRight') goNext();
+  if(e.key==='ArrowLeft') goPrev();
+});
+
+document.querySelectorAll('.modes button').forEach(b=>b.addEventListener('click',()=>{
+  mode=b.dataset.mode;
+  document.querySelectorAll('.modes button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  pickSides();render();
+}));
+
+try{window.speechSynthesis&&window.speechSynthesis.getVoices();window.speechSynthesis&&(window.speechSynthesis.onvoiceschanged=()=>{})}catch(e){}
+buildDeck();render();
+}
+</script>
+</body>
+</html>
