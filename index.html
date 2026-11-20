@@ -28,6 +28,10 @@ h1{font-size:clamp(26px,5vw,36px);line-height:1.05;margin:4px 0 18px;font-weight
 .modes button{font:600 16px Rubik,sans-serif;min-height:44px;padding:8px 18px;border-radius:999px;border:2px solid rgba(255,255,255,.55);background:transparent;color:var(--text);cursor:pointer}
 .modes button[aria-pressed=true]{background:#fff;color:var(--ink);border-color:#fff}
 button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.voicerow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;margin:-8px 0 22px;font-weight:600}
+.voicerow select{font:16px Rubik,sans-serif;min-height:44px;max-width:min(300px,70vw);padding:6px 10px;border-radius:12px;border:0;background:#fff;color:var(--ink)}
+.voicerow button{font:600 16px Rubik,sans-serif;min-height:44px;padding:6px 14px;border-radius:12px;border:0;background:var(--soft);color:var(--text);cursor:pointer}
+select:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .stage{perspective:1200px;width:min(440px,100%);aspect-ratio:4/3}
 .card{position:relative;width:100%;height:100%;transition:transform .5s ease;transform-style:preserve-3d;cursor:pointer;border:0;padding:0;background:none;display:block}
 .card.flipped{transform:rotateY(180deg)}
@@ -67,6 +71,11 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
   <button data-mode="en" aria-pressed="false">English → עברית</button>
   <button data-mode="mix" aria-pressed="false">Mix</button>
 </div>
+<div class="voicerow">
+  <label for="voice">Voice</label>
+  <select id="voice"><option value="">Loading voices…</option></select>
+  <button id="test" type="button">Test</button>
+</div>
 
 <div class="stage">
   <div class="card" id="card" role="button" tabindex="0" aria-label="Flip card">
@@ -83,7 +92,7 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 </div>
 <div class="prog" aria-hidden="true"><div id="fill"></div></div>
 
-<p class="note">Tap the card to flip it. Tap or hover the orange button to hear the English word. Every word comes up 3 times, in random order.</p>
+<p class="note">Tap the card or press Space to flip it. Use the → and ← keys for next and back. Tap or hover the orange button to hear the English word. Every word comes up 3 times, in random order.</p>
 
 <div class="done" id="done" hidden>
   <div class="donebox">
@@ -152,11 +161,35 @@ function speak(text){
     s.cancel();
     const u=new SpeechSynthesisUtterance(text);
     u.lang='en-US'; u.rate=.85;
-    const v=s.getVoices().find(v=>/^en(-|_)US/i.test(v.lang))||s.getVoices().find(v=>/^en/i.test(v.lang));
-    if(v) u.voice=v;
+    const v=currentVoice();
+    if(v){u.voice=v;u.lang=v.lang}
     s.speak(u);
   }catch(e){}
 }
+
+const sel=document.getElementById('voice');
+const FEMALE=/aria|jenny|michelle|ana\b|emma|ava|sonia|libby|natasha|clara|samantha|victoria|karen|moira|tessa|fiona|zira|susan|hazel|female|allison|serena|nicky|joanna|salli|kendra|kimberly|ivy/i;
+const NATURAL=/natural|neural|online|enhanced|premium|google/i;
+let voices=[];
+function score(v){return (NATURAL.test(v.name)?4:0)+(FEMALE.test(v.name)?2:0)+(/en(-|_)US/i.test(v.lang)?1:0)}
+function loadVoices(){
+  try{
+    const all=(window.speechSynthesis&&speechSynthesis.getVoices())||[];
+    voices=all.filter(v=>/^en/i.test(v.lang)).sort((a,b)=>score(b)-score(a)||a.name.localeCompare(b.name));
+    if(!voices.length){sel.innerHTML='<option value="">Default voice</option>';return}
+    let saved=''; try{saved=localStorage.getItem('wfc-voice')||''}catch(e){}
+    sel.innerHTML=voices.map((v,i)=>'<option value="'+i+'">'+v.name.replace(/^Microsoft |^Google /,'')+' ('+v.lang+')'+(NATURAL.test(v.name)?' · natural':'')+'</option>').join('');
+    const si=voices.findIndex(v=>v.name===saved);
+    sel.value=String(si>=0?si:0);
+  }catch(e){}
+}
+function currentVoice(){return voices[+sel.value]||null}
+sel.addEventListener('change',()=>{
+  const v=currentVoice(); try{if(v)localStorage.setItem('wfc-voice',v.name)}catch(e){}
+  lastSpoken=0; speak('Hello! Let\'s practise.');
+});
+document.getElementById('test').addEventListener('click',()=>{lastSpoken=0;speak(WORDS[order[pos]][0])});
+try{if(window.speechSynthesis){loadVoices();speechSynthesis.onvoiceschanged=loadVoices}}catch(e){}
 
 function faceHTML(lang,w){
   if(lang==='he') return '<div class="word" dir="rtl" lang="he">'+w[1]+'</div>';
@@ -184,16 +217,22 @@ card.addEventListener('mouseover',e=>{
   const b=e.target.closest('.say');
   if(b && !b.contains(e.relatedTarget)) speak(b.dataset.say);
 });
-card.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();flip()}});
+card.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();flip()}});
 
 document.getElementById('next').addEventListener('click',goNext);
 document.getElementById('prev').addEventListener('click',goPrev);
 document.getElementById('shuffle').addEventListener('click',restart);
 document.getElementById('again').addEventListener('click',restart);
+const isSpace=e=>e.key===' '||e.code==='Space';
 document.addEventListener('keydown',e=>{
   if(!document.getElementById('done').hidden) return;
-  if(e.key==='ArrowRight') goNext();
-  if(e.key==='ArrowLeft') goPrev();
+  if(e.target===sel) return;
+  if(isSpace(e)){e.preventDefault();if(!e.repeat)flip();return}
+  if(e.key==='ArrowRight'){e.preventDefault();goNext()}
+  if(e.key==='ArrowLeft'){e.preventDefault();goPrev()}
+});
+document.addEventListener('keyup',e=>{
+  if(e.target!==sel && isSpace(e) && document.getElementById('done').hidden) e.preventDefault();
 });
 
 document.querySelectorAll('.modes button').forEach(b=>b.addEventListener('click',()=>{
@@ -202,7 +241,6 @@ document.querySelectorAll('.modes button').forEach(b=>b.addEventListener('click'
   pickSides();render();
 }));
 
-try{window.speechSynthesis&&window.speechSynthesis.getVoices();window.speechSynthesis&&(window.speechSynthesis.onvoiceschanged=()=>{})}catch(e){}
 buildDeck();render();
 }
 </script>
